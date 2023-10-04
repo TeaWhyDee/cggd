@@ -62,7 +62,7 @@ namespace cg
 	template<typename T>
 	inline T& resource<T>::item(size_t x, size_t y)
 	{
-		return data.at(stride*y + x);
+		return data.at(x + y * stride);
 	}
 	template<typename T>
 	inline size_t resource<T>::get_size_in_bytes() const
@@ -85,11 +85,7 @@ namespace cg
 	{
 		static color from_float3(const float3& in)
 		{
-			color data{};
-			data.r = in.x * 255;
-			data.g = in.y * 255;
-			data.b = in.z * 255;
-			return data;
+			return color{in.x, in.y, in.z};
 		};
 		float3 to_float3() const
 		{
@@ -105,27 +101,27 @@ namespace cg
 		static unsigned_color from_color(const color& color)
 		{
 			return unsigned_color{
-					static_cast<uint8_t>(std::clamp(color.r * 255, 0.f, 255.f)),
-					static_cast<uint8_t>(std::clamp(color.g * 255, 0.f, 255.f)),
-					static_cast<uint8_t>(std::clamp(color.b * 255, 0.f, 255.f)),
+					static_cast<uint8_t>(std::clamp(color.r, 0.f, 1.f) * 255.f),
+					static_cast<uint8_t>(std::clamp(color.g, 0.f, 1.f) * 255.f),
+					static_cast<uint8_t>(std::clamp(color.b, 0.f, 1.f) * 255.f),
 			};
 		};
 		static unsigned_color from_float3(const float3& color)
 		{
-			float3 clamped = clamp(color * 255.f, 0.f, 255.f);
+			float3 clamped_color = clamp(255.f * color, 0.f, 255.f);
 			return unsigned_color{
-					static_cast<uint8_t>(clamped.x),
-					static_cast<uint8_t>(clamped.y),
-					static_cast<uint8_t>(clamped.z),
+					static_cast<uint8_t>(clamped_color.x),
+					static_cast<uint8_t>(clamped_color.y),
+					static_cast<uint8_t>(clamped_color.z),
 			};
 		};
 		float3 to_float3() const
 		{
 			return float3{
-					static_cast<float>(r),
-					static_cast<float>(g),
-					static_cast<float>(b)
-			}/255.f;
+					static_cast<float>(r) / 255.f,
+					static_cast<float>(g) / 255.f,
+					static_cast<float>(b) / 255.f,
+			};
 		};
 		uint8_t r;
 		uint8_t g;
@@ -138,22 +134,17 @@ namespace cg
 		float x;
 		float y;
 		float z;
-
 		float nx;
 		float ny;
 		float nz;
-
 		float u;
 		float v;
-
 		float ambient_r;
 		float ambient_g;
 		float ambient_b;
-
 		float diffuse_r;
 		float diffuse_g;
 		float diffuse_b;
-
 		float emissive_r;
 		float emissive_g;
 		float emissive_b;
