@@ -71,7 +71,8 @@ const float4x4 cg::world::camera::get_view_matrix() const
 			{x_axis.x, y_axis.x, z_axis.x, 0},
 			{x_axis.y, y_axis.y, z_axis.y, 0},
 			{x_axis.z, y_axis.z, z_axis.z, 0},
-			{-dot(x_axis, position), -dot(y_axis, position), -dot(z_axis, position), 1},
+			{-dot(x_axis, position), -dot(y_axis, position),
+			 -dot(z_axis, position), 1},
 	};
 }
 

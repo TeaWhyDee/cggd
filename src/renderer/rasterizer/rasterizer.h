@@ -117,8 +117,8 @@ namespace cg::renderer
 				vertex.y = processed_vertex.first.y / processed_vertex.first.w;
 				vertex.z = processed_vertex.first.z / processed_vertex.first.w;
 
-				vertex.x = (vertex.x + 1.f) * width / 2.f;
-				vertex.y = (1.f - vertex.y) * height / 2.f;
+				vertex.x = ( vertex.x + 1.f) * width / 2.f;
+				vertex.y = (-vertex.y + 1.f) * height / 2.f;
 			}
 
 			float2 vertex_a = float2{vertices[0].x, vertices[0].y};
@@ -126,12 +126,16 @@ namespace cg::renderer
 			float2 vertex_c = float2{vertices[2].x, vertices[2].y};
 
 			float2 min_vertex = min(min(vertex_a, vertex_b), vertex_c);
-			float2 bounding_box_begin = round(clamp(min_vertex, float2{0.f, 0.f},
-													float2{static_cast<float>(width - 1), static_cast<float>(height - 1)}));
+			float2 bounding_box_begin = round(clamp(
+						min_vertex, float2{0.f, 0.f},
+						float2{static_cast<float>(width - 1), static_cast<float>(height - 1)})
+			);
 
 			float2 max_vertex = max(max(vertex_a, vertex_b), vertex_c);
-			float2 bounding_box_end = round(clamp(max_vertex, float2{0.f, 0.f},
-												  float2{static_cast<float>(width - 1), static_cast<float>(height - 1)}));
+			float2 bounding_box_end = round(clamp(
+					max_vertex, float2{0.f, 0.f},
+					float2{static_cast<float>(width - 1), static_cast<float>(height - 1)})
+			);
 
 			float edge = edge_function(vertex_a, vertex_b, vertex_c);
 
@@ -140,7 +144,7 @@ namespace cg::renderer
 				for (float y = bounding_box_begin.y; y <= bounding_box_end.y; y += 1.f)
 				{
 					float2 point{x, y};
-					float edge0 = edge_function(vertex_b, vertex_c, point);
+					float edge0 = edge_function(vertex_a, vertex_b, point);
 					float edge1 = edge_function(vertex_b, vertex_c, point);
 					float edge2 = edge_function(vertex_c, vertex_a, point);
 					if (edge0 >= 0.f && edge1 >= 0.f && edge2 >= 0.f)
@@ -157,7 +161,7 @@ namespace cg::renderer
 								  w * vertices[2].z;
 
 					    if (depth_test(z, u_x, u_y)) {
-							auto pixel_result = pixel_shader(vertices[0], 0);
+							auto pixel_result = pixel_shader(vertices[0], z);
 							render_target->item(u_x, u_y) = RT::from_color(pixel_result);
 							depth_buffer->item(u_x, u_y) = z;
 						}

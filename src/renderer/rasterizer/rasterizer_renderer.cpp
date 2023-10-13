@@ -44,16 +44,25 @@ void cg::renderer::rasterization_renderer::render()
 	float4x4 matrix = mul(
 			camera->get_projection_matrix(),
 			camera->get_view_matrix(),
-			model->get_world_matrix());
+			model->get_world_matrix()
+			);
 	rasterizer->vertex_shader = [&](float4 vertex, cg::vertex data) {
 		auto processed = mul(matrix, vertex);
 		return std::make_pair(processed, data);
 	};
+	// TODO: area of interest
 	rasterizer->pixel_shader = [](const cg::vertex& data, const float z) {
+		float r = 4000;
+		float min = 1-(1/r);
+//		float d = (1-z)*1000;
+	    float d = (z-min)*r;
+		printf("%f   ", z);
+	    printf("%f   ", d);
+//		float d = 0;
 		return cg::color{
-				data.ambient_r,
-				data.ambient_g,
-				data.ambient_b,
+				data.ambient_r - d,
+				data.ambient_g - d,
+				data.ambient_b - d,
 		};
 	};
 
