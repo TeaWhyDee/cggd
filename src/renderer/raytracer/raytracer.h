@@ -144,7 +144,7 @@ namespace cg::renderer
 	{
 		width = in_width;
 		height = in_height;
-		// TODO Lab: 2.06 Add `history` resource in `raytracer` class
+		history = std::make_shared<cg::resource<float3>>(width, height);
 	}
 
 	template<typename VB, typename RT>
@@ -153,8 +153,8 @@ namespace cg::renderer
 	{
 		for (size_t i=0; i<render_target->get_number_of_elements(); i++){
 			render_target->item(i) = in_clear_value;
+			history->item(i) = float3{0.f,0.f,0.f};
 		}
-		// TODO Lab: 2.06 Add `history` resource in `raytracer` class
 	}
 
 	template<typename VB, typename RT>
@@ -175,16 +175,19 @@ namespace cg::renderer
 		for (size_t i=0; i<index_buffers.size(); i++) {
 			auto& index_buffer = index_buffers[i];
 			auto& vertex_buffer = vertex_buffers[i];
+			aabb<VB> aabb;
+
 			size_t index = 0;
 			while (index < index_buffer->get_number_of_elements()) {
 				triangle<VB> triangle(
 						vertex_buffer->item(index_buffer->item(index++)),
 						vertex_buffer->item(index_buffer->item(index++)),
 						vertex_buffer->item(index_buffer->item(index++)));
-				triangles.push_back(triangle);
+				//triangles.push_back(triangle);
+				aabb.add_triangle(triangle);
 			}
+			acceleration_structures.push_back(aabb);
 		}
-		// TODO Lab: 2.05 Implement `build_acceleration_structure` method of `raytracer` class
 	}
 
 	template<typename VB, typename RT>
@@ -192,22 +195,42 @@ namespace cg::renderer
 			float3 position, float3 direction,
 			float3 right, float3 up, size_t depth, size_t accumulation_num)
 	{
-#pragma omp parallel for // NOLINT(*-use-default-none)
-		for(size_t x=0; x<width; x++){
-			for(size_t y=0; y<height; y++){
-				float u = (2.f * x) / static_cast<float>(width) - 1.f;
-				float v = (2.f * y) / static_cast<float>(height) - 1.f;
-				u *= static_cast<float>(width) / static_cast<float>(height);
-				float3 ray_direction = direction + right * u - up * v;
+		for (size_t frame_id = 0; frame_id < accumulation_num; frame_id++) {
+			std::cout << "Tracing " << frame_id << "/" << accumulation_num << " frame\n";
+			float2 jitter = get_jitter(frame_id);
 
-				ray primary_ray(position, ray_direction);
-				payload payload = trace_ray(primary_ray, depth);
+#pragma omp parallel for// NOLINT(*-use-default-none)
+			for (int x = 0; x < width; x++) {
+				for (int y = 0; y < height; y++) {
+					float u = (2.f * x + jitter.x) / static_cast<float>(width) - 1.f;
+					float v = (2.f * y + jitter.y) / static_cast<float>(height) - 1.f;
+					u *= static_cast<float>(width) / static_cast<float>(height);
+					float3 ray_direction = direction + right * u - up * v;
 
-				render_target->item(x,y) = RT::from_color(payload.color);
+					ray primary_ray(position, ray_direction);
+					payload payload = trace_ray(primary_ray, depth);
+
+					history->item(x, y) += sqrt(payload.color.to_float3() / accumulation_num);
+					if (frame_id + 1 == accumulation_num) {
+						render_target->item(x, y) = RT::from_float3(history->item(x, y));
+					}
+				}
 			}
 		}
-		// TODO Lab: 2.06 Implement TAA in `ray_generation` method of `raytracer` class
 	}
+//		for(size_t x=0; x<width; x++){
+//			for(size_t y=0; y<height; y++){
+//				float u = (2.f * x) / static_cast<float>(width) - 1.f;
+//				float v = (2.f * y) / static_cast<float>(height) - 1.f;
+//				u *= static_cast<float>(width) / static_cast<float>(height);
+//				float3 ray_direction = direction + right * u - up * v;
+//
+//				ray primary_ray(position, ray_direction);
+//				payload payload = trace_ray(primary_ray, depth);
+//
+//				render_target->item(x,y) = RT::from_color(payload.color);
+//			}
+//		}
 
 	template<typename VB, typename RT>
 	inline payload raytracer<VB, RT>::trace_ray(
@@ -222,13 +245,18 @@ namespace cg::renderer
 		closest_hit_payload.t = max_t;
 		const triangle<VB>* closest_triangle = nullptr;
 
-		for (auto & triangle: triangles) {
-			payload payload = intersection_shader(triangle, ray);
-			if (payload.t > min_t && payload.t < closest_hit_payload.t) {
-				closest_hit_payload = payload;
-				closest_triangle = &triangle;
-				if (any_hit_shader)
-					return any_hit_shader(ray, payload, triangle);
+		for (auto& aabb: acceleration_structures) {
+			if(!aabb.aabb_test(ray)){
+				continue;
+			}
+			for (auto& triangle: aabb.get_triangles()) {
+				payload payload = intersection_shader(triangle, ray);
+				if (payload.t > min_t && payload.t < closest_hit_payload.t) {
+					closest_hit_payload = payload;
+					closest_triangle = &triangle;
+					if (any_hit_shader)
+						return any_hit_shader(ray, payload, triangle);
+				}
 			}
 		}
 
@@ -236,7 +264,6 @@ namespace cg::renderer
 			if (closest_hit_shader)
 				return closest_hit_shader(ray, closest_hit_payload, *closest_triangle, depth);
 		}
-		// TODO Lab: 2.05 Adjust `trace_ray` method of `raytracer` class to traverse the acceleration structure
 		return miss_shader(ray);
 	}
 
@@ -272,26 +299,65 @@ namespace cg::renderer
 	template<typename VB, typename RT>
 	float2 raytracer<VB, RT>::get_jitter(int frame_id)
 	{
-		// TODO Lab: 2.06 Implement `get_jitter` method of `raytracer` class
+		float2 result{0.f, 0.f};
+
+		constexpr int base_x = 2;
+		int index = frame_id + 1;
+		float inv_base = 1.f/base_x;
+		float fraction = inv_base;
+		while(index>0){
+			result.x += static_cast<float>(index % base_x) * fraction;
+			index /= base_x;
+			fraction *= inv_base;
+		}
+
+		constexpr int base_y = 3;
+		index = frame_id + 1;
+		inv_base = 1.f/base_x;
+		fraction = inv_base;
+		while(index>0){
+			result.y += static_cast<float>(index % base_y) * fraction;
+			index /= base_y;
+			fraction *= inv_base;
+		}
+
+		return result - 0.5f;
 	}
 
 
 	template<typename VB>
 	inline void aabb<VB>::add_triangle(const triangle<VB> triangle)
 	{
-		// TODO Lab: 2.05 Implement `aabb` class
+		if (triangles.empty()) {
+			aabb_min = aabb_max = triangle.a;
+		}
+
+		triangles.push_back(triangle);
+
+		aabb_max = max(aabb_max, triangle.a);
+		aabb_max = max(aabb_max, triangle.b);
+		aabb_max = max(aabb_max, triangle.c);
+
+		aabb_min = min(aabb_min, triangle.a);
+		aabb_min = min(aabb_min, triangle.b);
+		aabb_min = min(aabb_min, triangle.c);
 	}
 
 	template<typename VB>
 	inline const std::vector<triangle<VB>>& aabb<VB>::get_triangles() const
 	{
-		// TODO Lab: 2.05 Implement `aabb` class
+		return triangles;
 	}
 
 	template<typename VB>
 	inline bool aabb<VB>::aabb_test(const ray& ray) const
 	{
-		// TODO Lab: 2.05 Implement `aabb` class
+		float3 inv_ray_dir = 1.f/ray.direction;
+		float3 t0 = (aabb_max - ray.position) * inv_ray_dir;
+		float3 t1 = (aabb_min - ray.position) * inv_ray_dir;
+		float3 t_min = min(t0, t1);
+		float3 t_max = max(t0, t1);
+		return maxelem(t_min) <= maxelem(t_max);
 	}
 
 }// namespace cg::renderer
