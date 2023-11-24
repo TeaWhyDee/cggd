@@ -48,6 +48,7 @@ void cg::renderer::dx12_renderer::destroy()
 
 void cg::renderer::dx12_renderer::update()
 {
+	auto now = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<float> duration = now - current_time;
 	frame_duration = duration.count();
 	current_time = now;
@@ -178,22 +179,6 @@ void cg::renderer::dx12_renderer::create_command_list()
 
 
 void cg::renderer::dx12_renderer::load_pipeline()
-{
-	ComPtr<IDXGIFactory4> dxgi_factory = get_dxgi_factory();
-	initialize_device(dxgi_factory);
-	create_direct_command_queue();
-	create_swap_chain(dxgi_factory);
-
-	create_render_target_views();
-}
-
-D3D12_STATIC_SAMPLER_DESC cg::renderer::dx12_renderer::get_sampler_descriptor()
-{
-	D3D12_STATIC_SAMPLER_DESC sampler_desc{};
-	return sampler_desc;
-}
-
-void cg::renderer::dx12_renderer::create_root_signature(const D3D12_STATIC_SAMPLER_DESC* sampler_descriptors, UINT num_sampler_descriptors)
 {
 	ComPtr<IDXGIFactory4> dxgi_factory = get_dxgi_factory();
 	initialize_device(dxgi_factory);
@@ -440,7 +425,6 @@ void cg::renderer::dx12_renderer::load_assets()
 									   index_buffer_size,
 									   index_buffer_name);
 
-
 		copy_data(index_buffer_data->get_data(),
 				  index_buffer_size,
 				  index_buffers[i]);
@@ -552,7 +536,7 @@ void cg::renderer::dx12_renderer::move_to_next_frame()
 void cg::renderer::dx12_renderer::wait_for_gpu()
 {
 	THROW_IF_FAILED(command_queue->Signal(fence.Get(), fence_values[frame_index]));
-	THROW_IF_FAILED(fence->SetEventOfCompletion(
+	THROW_IF_FAILED(fence->SetEventOnCompletion(
 			fence_values[frame_index],
 			fence_event));
 
